@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP connections",
+    "description": "Lists every configured MCP server under the message composer and switches its connection on or off without restarting."
+  }
+}

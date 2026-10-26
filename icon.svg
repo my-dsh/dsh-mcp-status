@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MCP connections">
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#1f6feb"/>
+  <g fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 26v-6M34 26v-6"/>
+    <path d="M19 26h18v6a9 9 0 0 1-18 0z"/>
+    <path d="M28 41v7a8 8 0 0 0 8 8h3"/>
+    <circle cx="45" cy="56" r="0"/>
+  </g>
+  <circle cx="45" cy="47" r="4" fill="#ffffff"/>
+</svg>

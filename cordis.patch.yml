@@ -1,0 +1,14 @@
+# The dsh-mcp-status bundle patch: one row that contributes the composer-toolbar
+# button and the Host routes behind it.
+#
+# The row connects to nothing by itself. It reads the profile's
+# `@deepseek-ai/dsh-mcp-client` rows (serverName, transport, persisted
+# enablement, live fiber phase, registered tool count) and opens or closes each
+# connection on demand, so DSH can start without connecting to any MCP server.
+#
+# After installing, switch the MCP rows you do not want at startup off — either
+# from the panel's own switches or with `disabled: true` on each row in your
+# profile patch — so the Loader mounts none of them on the next start.
+- insert:
+    - id: mcp-status
+      name: '@my-dsh/dsh-mcp-status'
