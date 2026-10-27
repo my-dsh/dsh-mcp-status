@@ -19,7 +19,7 @@ window.__ModuleLoader__.load({
       'trigger.summary': 'MCP {on}/{total} 已连接',
       'trigger.aria': 'MCP 连接：{on}/{total} 已连接，点击查看',
       'panel.title': 'MCP 连接',
-      'panel.subtitle': '连接由本插件按需建立，启动时不会自动连接。',
+      'panel.subtitle': '开关会记在本机 SQLite 里，重启后恢复你上次开着的服务器。',
       'panel.close': '关闭',
       'panel.refresh': '刷新',
       'panel.refreshing': '刷新中…',
@@ -47,6 +47,7 @@ window.__ModuleLoader__.load({
       'reason.invalid-body': '请求无效。',
       'reason.invalid-json': '请求无效。',
       'reason.invalid-entry': '条目无效。',
+      'state.restoring': '恢复中',
     }
 
     /** English copy, key-for-key with {@link zh}. */
@@ -56,7 +57,7 @@ window.__ModuleLoader__.load({
       'trigger.summary': 'MCP {on}/{total} connected',
       'trigger.aria': 'MCP connections: {on}/{total} connected. Open the panel',
       'panel.title': 'MCP connections',
-      'panel.subtitle': 'Connections open on demand; nothing connects when DSH starts.',
+      'panel.subtitle': 'Switches are remembered in local SQLite; servers left on reconnect on the next start.',
       'panel.close': 'Close',
       'panel.refresh': 'Refresh',
       'panel.refreshing': 'Refreshing…',
@@ -84,6 +85,7 @@ window.__ModuleLoader__.load({
       'reason.invalid-body': 'The request was invalid.',
       'reason.invalid-json': 'The request was invalid.',
       'reason.invalid-entry': 'The row is invalid.',
+      'state.restoring': 'Restoring',
     }
 
     /** Panel styles, rendered as an element so unmounting removes them. */
@@ -238,6 +240,10 @@ window.__ModuleLoader__.load({
       if (row.phase === 'loading') return { text: t('state.loading') }
       if (row.phase === 'pending') return { text: t('state.pending') }
       if (row.phase === 'unloading') return { text: t('state.unloading') }
+      // Recorded as on but nothing is mounted yet: the startup restore is
+      // still running, or its attempt failed and the next start will retry.
+      // Reporting "disconnected" here would contradict the switch.
+      if (row.enabled === true) return { text: t('state.restoring') }
       return { text: t('state.off') }
     }
 

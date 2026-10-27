@@ -4,13 +4,13 @@ English | [中文](README.md)
 
 An MCP connection panel for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-It adds a button to the toolbar below the message composer that lists every MCP server configured on this machine and switches each connection on or off. **With it installed, DSH starts without connecting to any MCP server.**
+It adds a button to the toolbar below the message composer that lists every MCP server configured on this machine and switches each connection on or off. **Each switch is stored in local SQLite, so a restart restores the servers you left on; a fresh install connects to none.**
 
 ## Why this plugin
 
 In DSH each MCP server is one `@deepseek-ai/dsh-mcp-client` row. While such a row is enabled, the Loader opens its connection at startup; a server that fails to connect sends the supervisor into reconnect backoff (500ms → 30s, up to 10 attempts), so the background keeps retrying every few dozen seconds. For servers you rarely use that both slows startup and keeps burning child processes and connection attempts.
 
-This plugin moves the "should this be connected?" decision from startup to the user: rows stay as pure configuration, and connections are opened on demand by the panel.
+This plugin moves the "should this be connected?" decision from startup to the user: rows stay as pure configuration, connections are opened on demand by the panel, and your choice is recorded in SQLite so it survives a restart.
 
 ## Install
 
@@ -51,7 +51,11 @@ It sits in the toolbar row below the composer: the same flex container (`.tools`
 
 **Rows are pure configuration.** Each `@deepseek-ai/dsh-mcp-client` row remains the single source of truth for a server's settings (transport / command / args / env / url), but it is set to `disabled: true` so the Loader mounts none of them. Startup therefore opens zero connections and runs zero reconnect timers.
 
-**The panel owns connections.** Switching a server on mounts the shipped `dsh-mcp-client` plugin in this plugin's own context with that row's config, so its tools and resources register into `ctx.tools` exactly as before; switching it off disposes that mount, closing the transport and unregistering the tools. A connection lives exactly as long as the user keeps it on, and a restart always begins disconnected.
+**The switch lives in SQLite.** One `node:sqlite` database (default `$DSH_HOME/mcp-status/mcp-status.db`) holds an `mcp_state(server, enabled)` table keyed by `serverName`. **A server with no row is off**, so a fresh install starts connected to nothing.
+
+**The panel owns connections.** Switching a server on writes `enabled=1` first, then mounts the shipped `dsh-mcp-client` plugin in this plugin's own context with that row's config, so its tools and resources register into `ctx.tools` exactly as before; switching it off writes `enabled=0` and disposes that mount, closing the transport and unregistering the tools.
+
+**A restart restores the set.** After activation (once the Loader has built the row tree) the plugin reads the database and mounts every server recorded as on, so reopening DSH returns to the state you left. A failed connection never leaves the record stuck on: the failure writes `enabled=0` immediately, the panel shows why, and the next start does not retry it pointlessly.
 
 **One compatibility path.** If a row is still enabled in the profile, the panel reports it honestly as "connected (maintained by that row)". Switching it off then persists `disabled: true` through the Plugin Manager, so the switch always means the same thing: off stays off across restarts.
 
@@ -70,10 +74,23 @@ The row in `cordis.patch.yml` accepts an optional config, overridable through th
 - id: mcp-status
   name: '@my-dsh/dsh-mcp-status'
   config:
+    # Switch database path (default $DSH_HOME/mcp-status/mcp-status.db).
+    # The directory is created 0700 and the file written 0600.
+    databasePath: /home/me/.dsh/mcp-status/mcp-status.db
     # Milliseconds to wait for one connection (default 8000). After the bound
     # the panel shows "connecting" and keeps waiting instead of calling a slow
     # server failed.
     connectTimeoutMs: 8000
+    # Milliseconds after activation before restoring the servers recorded as on
+    # (default 1200). Gives the Loader time to finish building the row tree.
+    restoreDelayMs: 1200
+```
+
+To clear every recorded switch, delete the database file (the next start rebuilds
+an empty table):
+
+```sh
+rm ~/.dsh/mcp-status/mcp-status.db*
 ```
 
 ## Dependencies
@@ -86,7 +103,7 @@ The client half is plain JavaScript (`React.createElement`, no build step) and r
 
 ```
 dsh-mcp-status/
-├── index.js            # Host half: read MCP rows, mount/unmount connections, two /api routes
+├── index.js            # Host half: SQLite switch store, MCP rows, mount/unmount, two /api routes
 ├── client.js           # Client half: the toolbar button and its panel
 ├── cordis.patch.yml    # Bundle patch: inserts the mcp-status row
 ├── locale/
