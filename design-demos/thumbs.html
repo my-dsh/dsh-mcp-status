@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>六格缩略图 · MCP 面板</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #e8e9eb; padding: 28px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .grid { display: grid; grid-template-columns: repeat(3, 480px); gap: 24px; }
+  .cell { background: #fff; border-radius: 10px; overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 6px 20px rgba(0,0,0,.06); }
+  .cap { display: flex; align-items: baseline; gap: 8px; padding: 9px 14px;
+         border-bottom: 1px solid #eceef0; font-size: 12px; color: #61666b; }
+  .cap b { color: #0f1115; font-size: 13px; font-weight: 600; }
+  .cap .tag { margin-left: auto; font-size: 10px; letter-spacing: .06em;
+              text-transform: uppercase; color: #9aa0a6; }
+  .stage { height: 300px; display: grid; place-items: center; background: #f7f8f9; position: relative; }
+
+  /* ---- shared panel shell ---- */
+  .panel {
+    width: 316px; border-radius: 16px; background: #fff; overflow: hidden;
+    color: #61666b; font-size: 12px; line-height: 18px;
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.06), 0 8px 28px rgba(0,0,0,.09);
+  }
+
+  /* ================= A · 台账 ================= */
+  .a-panel { padding: 14px 0 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .a-head { display: flex; align-items: baseline; padding: 0 16px 10px; }
+  .a-title { font-size: 12px; font-weight: 600; color: #0f1115;
+             letter-spacing: .07em; text-transform: uppercase; }
+  .a-count { margin-left: auto; font-size: 11px; color: #9aa0a6; }
+  .a-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center;
+           gap: 10px; padding: 9px 16px; border-top: 1px solid #e6e8ea; }
+  .a-row:last-child { border-bottom: 1px solid #e6e8ea; }
+  .a-name { color: #0f1115; font-size: 12.5px; font-weight: 500; }
+  .a-num { font-size: 15px; font-weight: 500; color: #0f1115;
+           font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .a-num.off { color: #c8ccd0; }
+  .a-mark { width: 9px; height: 9px; border: 1.5px solid #c8ccd0; border-radius: 1px; }
+  .a-mark.on { background: #22c55e; border-color: #22c55e; }
+  .a-led { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+  .a-led i { width: 3px; background: #c8ccd0; border-radius: 1px; }
+  .a-led i:nth-child(1) { height: 5px; } .a-led i:nth-child(2) { height: 9px; }
+  .a-led i:nth-child(3) { height: 14px; }
+  .a-led.on i { background: #22c55e; }
+
+  /* ================= C · 分组 ================= */
+  .c-panel { padding: 12px 0 6px; }
+  .c-head { display: flex; align-items: center; padding: 0 14px 10px; gap: 8px; }
+  .c-title { font-size: 13px; font-weight: 600; color: #0f1115; }
+  .c-badge { margin-left: auto; font-size: 11px; color: #61666b; background: #f0f1f3;
+             padding: 2px 7px; border-radius: 20px; }
+  .c-group { padding: 0 6px; }
+  .c-glabel { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px;
+              font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: #9aa0a6; }
+  .c-glabel::after { content: ''; flex: 1; height: 1px; background: #eceef0; }
+  .c-row { display: flex; align-items: center; gap: 9px; min-height: 44px;
+           padding: 0 8px; border-radius: 8px; }
+  .c-row.on { background: #f4fdf6; }
+  .c-dot { width: 7px; height: 7px; border-radius: 50%; background: #c8ccd0; flex: none; }
+  .c-dot.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.14); }
+  .c-body { min-width: 0; display: flex; flex-direction: column; line-height: 15px; }
+  .c-name { color: #0f1115; font-size: 12.5px; font-weight: 500; }
+  .c-meta { color: #9aa0a6; font-size: 10.5px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+  .c-sw { flex: none; margin-left: auto; width: 30px; height: 18px; border-radius: 9px;
+          background: #dcdfe3; position: relative; }
+  .c-sw.on { background: #0f1115; }
+  .c-sw i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+            border-radius: 50%; background: #fff; }
+  .c-sw.on i { left: 14px; }
+
+  /* ================= D · 图标行 ================= */
+  .d-panel { padding: 12px 8px 8px; }
+  .d-head { display: flex; align-items: center; gap: 7px; padding: 0 6px 9px; }
+  .d-title { font-size: 12.5px; font-weight: 600; color: #0f1115; }
+  .d-sub { margin-left: auto; font-size: 10.5px; color: #9aa0a6; }
+  .d-row { display: flex; align-items: center; gap: 10px; min-height: 48px;
+           padding: 0 6px; border-radius: 9px; }
+  .d-row.on { background: #f2f6ff; }
+  .d-ico { width: 30px; height: 30px; border-radius: 8px; flex: none;
+           display: grid; place-items: center; background: #eef0f3;
+           border: 1.5px solid transparent; color: #97a0ab; }
+  .d-row.on .d-ico { background: #e7f0ff; border-color: #3b82f6; color: #2563eb; }
+  .d-body { min-width: 0; display: flex; flex-direction: column; line-height: 15px; }
+  .d-name { color: #0f1115; font-size: 12.5px; font-weight: 500; }
+  .d-meta { color: #9aa0a6; font-size: 10.5px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; max-width: 175px; }
+  .d-act { margin-left: auto; flex: none; font-size: 10.5px; color: #9aa0a6; }
+
+  /* ================= B · 空容器（备选） ================= */
+  .b-panel { padding: 22px 20px 18px; background: #fafafa; }
+  .b-title { font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+             color: #b0b5ba; font-weight: 400; margin-bottom: 20px; }
+  .b-row { display: flex; align-items: center; gap: 14px; padding: 13px 0;
+           border-bottom: 1px solid #efefef; }
+  .b-dot { width: 10px; height: 10px; border-radius: 50%; background: #e2e2e2; flex: none; }
+  .b-dot.on { background: #22c55e; }
+  .b-name { color: #0a0a0a; font-size: 12.5px; font-weight: 300; letter-spacing: .02em; }
+  .b-meta { margin-top: 2px; color: #b0b5ba; font-size: 10px; font-weight: 300; }
+  .b-right { margin-left: auto; font-size: 10px; color: #b0b5ba; }
+
+  /* ================= E · 粗野（备选） ================= */
+  .e-panel { background: #fff; border: 2px solid #000; border-radius: 0; padding: 0; }
+  .e-bar { background: #000; color: #fff; padding: 7px 12px; display: flex;
+           align-items: center; gap: 8px; }
+  .e-bar b { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .e-big { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
+  .e-grid { display: grid; grid-template-columns: 96px 1fr; }
+  .e-cell { padding: 8px 12px; border-top: 1px solid #000; }
+  .e-cell.l { border-right: 1px solid #000; font-size: 11.5px; font-weight: 600; color: #000; }
+  .e-cell.r { font-size: 10px; color: #444; font-family: ui-monospace, monospace; }
+  .e-cell.r .on { color: #00a33e; font-weight: 700; }
+  .e-cell.r .off { color: #b00; }
+
+  /* ================= F · 拆字（备选） ================= */
+  .f-panel { background: #f7f4ee; padding: 0; position: relative; }
+  .f-hero { height: 96px; display: flex; align-items: center; padding: 0 16px; gap: 4px; }
+  .f-glyph { display: grid; grid-template-columns: repeat(3, 20px);
+             grid-template-rows: repeat(2, 20px); gap: 3px; }
+  .f-glyph i { background: #0a0a0a; border-radius: 1px; }
+  .f-glyph i.r { background: #e4351e; }
+  .f-glyph i.g { background: #ddd8ce; }
+  .f-side { writing-mode: vertical-rl; font-size: 10px; color: #8a8578;
+            letter-spacing: .16em; margin-left: 12px; }
+  .f-list { background: #fff; border-top: 1px solid #e0dbd0; }
+  .f-row { display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+           border-bottom: 1px solid #f0ece4; font-size: 11px; }
+  .f-dot { width: 6px; height: 6px; border-radius: 50%; background: #ccc; }
+  .f-dot.on { background: #22c55e; }
+  .f-nm { color: #1a1a1a; font-weight: 500; }
+  .f-cnt { margin-left: auto; color: #8a8578; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="grid">
+
+  <!-- A -->
+  <div class="cell">
+    <div class="cap"><b>A · 台账</b><span>Vignelli / 横线秩序</span><span class="tag">入选</span></div>
+    <div class="stage">
+      <div class="panel a-panel">
+        <div class="a-head"><span class="a-title">MCP</span><span class="a-count">1 / 3 连接</span></div>
+        <div class="a-row"><span class="a-name">chrome</span><span class="a-num">32</span><span class="a-led on"><i></i><i></i><i></i></span></div>
+        <div class="a-row"><span class="a-name">mysql</span><span class="a-num off">—</span><span class="a-led"><i></i><i></i><i></i></span></div>
+        <div class="a-row"><span class="a-name">mysqlob</span><span class="a-num off">—</span><span class="a-led"><i></i><i></i><i></i></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="cell">
+    <div class="cap"><b>C · 分组</b><span>Linear settings / 按状态分组</span><span class="tag">入选</span></div>
+    <div class="stage">
+      <div class="panel c-panel">
+        <div class="c-head"><span class="c-title">MCP 连接</span><span class="c-badge">1 个在用</span></div>
+        <div class="c-group">
+          <div class="c-glabel">已连接</div>
+          <div class="c-row on"><span class="c-dot on"></span>
+            <span class="c-body"><span class="c-name">chrome</span><span class="c-meta">npx chrome-devtools-mcp · 32 个工具</span></span>
+            <span class="c-sw on"><i></i></span></div>
+        </div>
+        <div class="c-group">
+          <div class="c-glabel">未连接</div>
+          <div class="c-row"><span class="c-dot"></span>
+            <span class="c-body"><span class="c-name">mysql</span><span class="c-meta">node mcp-server-mysql · 无工具</span></span>
+            <span class="c-sw"><i></i></span></div>
+          <div class="c-row"><span class="c-dot"></span>
+            <span class="c-body"><span class="c-name">mysqlob</span><span class="c-meta">node mcp-server-mysql · 无工具</span></span>
+            <span class="c-sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D -->
+  <div class="cell">
+    <div class="cap"><b>D · 图标行</b><span>Raycast Store / 图标位</span><span class="tag">入选</span></div>
+    <div class="stage">
+      <div class="panel d-panel">
+        <div class="d-head"><span class="d-title">MCP 连接</span><span class="d-sub">1 / 3</span></div>
+        <div class="d-row on">
+          <span class="d-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M2 5.5h12M4.5 8l1.5 1.5L4.5 11"/></svg></span>
+          <span class="d-body"><span class="d-name">chrome</span><span class="d-meta">chrome-devtools-mcp · 32 个工具</span></span>
+          <span class="d-act">已连接</span>
+        </div>
+        <div class="d-row">
+          <span class="d-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="8" cy="4" rx="5.5" ry="2.2"/><path d="M2.5 4v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2V4M2.5 8v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2V8"/></svg></span>
+          <span class="d-body"><span class="d-name">mysql</span><span class="d-meta">mcp-server-mysql · 无工具</span></span>
+          <span class="d-act">未连接</span>
+        </div>
+        <div class="d-row">
+          <span class="d-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="8" cy="4" rx="5.5" ry="2.2"/><path d="M2.5 4v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2V4M2.5 8v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2V8"/></svg></span>
+          <span class="d-body"><span class="d-name">mysqlob</span><span class="d-meta">mcp-server-mysql · 无工具</span></span>
+          <span class="d-act">未连接</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B 备选 -->
+  <div class="cell">
+    <div class="cap"><b>B · 空容器</b><span>原研哉 / 退让</span><span class="tag">备选</span></div>
+    <div class="stage">
+      <div class="panel b-panel">
+        <div class="b-title">MCP 连接</div>
+        <div class="b-row"><span class="b-dot on"></span>
+          <span><span class="b-name">chrome</span><div class="b-meta">chrome-devtools-mcp</div></span>
+          <span class="b-right">32 工具</span></div>
+        <div class="b-row"><span class="b-dot"></span>
+          <span><span class="b-name">mysql</span><div class="b-meta">mcp-server-mysql</div></span>
+          <span class="b-right">未连接</span></div>
+        <div class="b-row"><span class="b-dot"></span>
+          <span><span class="b-name">mysqlob</span><div class="b-meta">mcp-server-mysql</div></span>
+          <span class="b-right">未连接</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- E 备选 -->
+  <div class="cell">
+    <div class="cap"><b>E · 粗野</b><span>轮盘 1 号 / Businessweek</span><span class="tag">备选·偏过头</span></div>
+    <div class="stage">
+      <div class="panel e-panel">
+        <div class="e-bar"><b>MCP</b><span class="e-big">1/3</span><span style="margin-left:auto;font-size:10px">连接</span></div>
+        <div class="e-grid">
+          <div class="e-cell l">chrome</div><div class="e-cell r">stdio · 32 tools · <span class="on">ON</span></div>
+          <div class="e-cell l">mysql</div><div class="e-cell r">stdio · 0 tools · <span class="off">OFF</span></div>
+          <div class="e-cell l">mysqlob</div><div class="e-cell r">stdio · 0 tools · <span class="off">OFF</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- F 备选 -->
+  <div class="cell">
+    <div class="cap"><b>F · 拆字</b><span>轮盘东亚 5 号 / 韩家英</span><span class="tag">备选·偏过头</span></div>
+    <div class="stage">
+      <div class="panel f-panel">
+        <div class="f-hero">
+          <div class="f-glyph">
+            <i></i><i class="r"></i><i></i>
+            <i class="g"></i><i></i><i class="g"></i>
+          </div>
+          <div class="f-side">连接 · CONNECTIONS</div>
+        </div>
+        <div class="f-list">
+          <div class="f-row"><span class="f-dot on"></span><span class="f-nm">chrome</span><span class="f-cnt">32 工具</span></div>
+          <div class="f-row"><span class="f-dot"></span><span class="f-nm">mysql</span><span class="f-cnt">未连接</span></div>
+          <div class="f-row"><span class="f-dot"></span><span class="f-nm">mysqlob</span><span class="f-cnt">未连接</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

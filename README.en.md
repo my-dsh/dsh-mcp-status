@@ -42,10 +42,19 @@ Switch your existing MCP rows off so `disabled: true` lands in the profile — o
 It sits in the toolbar row below the composer: the same flex container (`.tools`) as the "+" button and the permission chip ("工作区内修改"), immediately to the right of that chip.
 
 - The button reads `MCP 2/3 connected`; the dot on its left shows whether anything is connected (green = connected, red = the read failed).
-- Clicking opens a panel with one row per server: name, transport, connection target, tool count, connection state, and a switch.
+- Clicking opens a **320px panel whose list is grouped by state** — connected and not connected. Opening it answers "what is running" before a single row's status is read; each group heading carries its own count.
+- Each 44px row holds a status dot, the server name, one line of metadata, the tool count, and a switch. **The tool count gets its own column** (right-aligned, tabular figures) because it is the only proof the connection actually reached something; with no tools it reads `—`.
+- The metadata line carries only what **distinguishes this server** (the URL's host, the script name, or the transport); the full command line is available on hover via `title`, rather than being truncated into fragments at 320px.
 - While open the panel refreshes every 4 seconds; while closed it issues no requests.
 - It matches the neighbouring chip: 28px tall, `radius-sm`, 13px/20px, same hover fill.
+- Light and dark themes use only DSH theme tokens, so switching themes never breaks the colours; measured body contrast is at least 5.6:1.
 - Copy follows the active interface language (Chinese and English).
+
+The design record is kept in `spec.md`, `directions.md`, and `direction-approved.md`, with the
+three directions and their screenshots under `design-demos/` (`thumbs.html` for the six
+candidates, `dir-1/2/3.html` for the three full directions, `index.html` for the side-by-side
+comparison). The shipped version is direction C: grouped by connection state rather than sorted
+by name.
 
 ## How it works
 

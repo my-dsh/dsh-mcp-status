@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>方向 C · 分组</title>
+<style>
+  /* Direction C — Linear settings grouping.
+     The panel's only question is "connected or not", so the list is grouped by
+     that answer instead of alphabetically: opening it should answer the
+     question without reading a single row's status.
+
+     Borrowed from Linear's redesigned settings: 10px uppercase group labels,
+     44px rows, one right-hand control axis, hairline-free grouping where the
+     group label does the dividing. */
+  :root {
+    --menu: var(--dsw-specific-menu, #f8f9fa);
+    --ink: var(--dsw-alias-label-primary, #0f1115);
+    --dim: var(--dsw-alias-label-secondary, #61666b);
+    --faint: var(--dsw-alias-label-tertiary, #81858c);
+    --line: var(--dsw-alias-border-l1, #0000000a);
+    --ok: var(--dsw-alias-state-success-primary, #22c55e);
+    --bad: var(--dsw-alias-state-error-primary, #ec1313);
+    --hover: var(--dsw-alias-interactive-bg-hover, #2631480f);
+    --radius-lg: var(--dsw-radius-lg, 16px);
+    --radius-md: var(--dsw-radius-md, 12px);
+    --shadow: var(--dsw-elevation-prominent, 0 0 0 .5px #00000029, 0 3px 8px #0000000a);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; padding: 48px 20px;
+    background: #e9ebee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .panel {
+    width: 340px; max-width: 100%;
+    border-radius: var(--radius-lg);
+    background: var(--menu);
+    -webkit-backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
+    backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
+    box-shadow: var(--shadow);
+    color: var(--dim);
+    padding: 13px 0 6px;
+    overflow: hidden;
+  }
+
+  /* ---- head ---- */
+  .head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 14px 11px;
+  }
+  .title { font-size: 13px; font-weight: 600; color: var(--ink); letter-spacing: -.005em; }
+  .badge {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500; line-height: 1;
+    color: var(--dim);
+    background: var(--dsw-alias-bg-layer-2, #ffffff80);
+    border: 1px solid var(--line);
+    padding: 4px 8px; border-radius: 20px;
+    font-variant-numeric: tabular-nums;
+  }
+  .badge i {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--ok) 16%, transparent);
+  }
+
+  /* ---- group ---- */
+  .group { padding: 0 6px; }
+  .group + .group { margin-top: 4px; }
+  .glabel {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 8px 5px;
+    font-size: 10px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .glabel span { flex: none; }
+  .glabel::after {
+    content: ''; flex: 1; height: 1px; background: var(--line);
+  }
+  .glabel em {
+    font-style: normal; font-variant-numeric: tabular-nums;
+    letter-spacing: .02em;
+  }
+
+  /* ---- row: 44px min, one right control axis ---- */
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    min-height: 44px; padding: 4px 8px;
+    border-radius: var(--radius-md);
+    transition: background 90ms linear;
+    cursor: default;
+  }
+  .row:hover { background: var(--hover); }
+
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%; flex: none;
+    background: var(--line);
+    border: 1px solid var(--dsw-alias-border-l2, #0000001a);
+    transition: background 120ms ease, box-shadow 120ms ease;
+  }
+  .row[data-on='true'] .dot {
+    background: var(--ok); border-color: transparent;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 15%, transparent);
+  }
+  .row[data-bad='true'] .dot { background: var(--bad); border-color: transparent;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 15%, transparent); }
+
+  .body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .name {
+    font-size: 13px; font-weight: 500; line-height: 17px; color: var(--ink);
+    letter-spacing: -.005em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .meta {
+    font-size: 11px; line-height: 15px; color: var(--faint);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* tool count sits between the text and the switch, right-aligned with it */
+  .tools {
+    margin-left: auto; flex: none;
+    font-size: 11.5px; font-variant-numeric: tabular-nums;
+    color: var(--dim); letter-spacing: .01em;
+  }
+  .tools[data-off='true'] { color: var(--faint); }
+
+  .sw {
+    width: 30px; height: 18px; flex: none;
+    border-radius: 9px; border: none; padding: 0; position: relative;
+    background: var(--dsw-alias-border-l2, #0000001a); cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .sw[aria-checked='true'] { background: var(--ink); }
+  .sw:disabled { cursor: progress; opacity: .55; }
+  .sw:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--dsw-alias-state-business-primary, #4176e6); }
+  .sw i {
+    position: absolute; top: 2px; left: 2px;
+    width: 14px; height: 14px; border-radius: 50%; background: #fff;
+    transition: transform 120ms cubic-bezier(.3,.7,.4,1);
+  }
+  .sw[aria-checked='true'] i { transform: translateX(12px); }
+
+  /* ---- empty group: honest, one line ---- */
+  .empty {
+    padding: 4px 8px 10px;
+    font-size: 11px; line-height: 16px; color: var(--faint);
+  }
+
+  /* ---- footer ---- */
+  .foot {
+    display: flex; align-items: center; gap: 6px;
+    margin: 6px 6px 0; padding: 9px 8px 7px;
+    border-top: 1px solid var(--line);
+    font-size: 11px; line-height: 15px; color: var(--faint);
+  }
+  .foot svg { flex: none; opacity: .75; }
+  .foot[data-bad='true'] { color: var(--bad); }
+
+  /* ---- demo chrome ---- */
+  .label {
+    position: fixed; top: 18px; left: 20px;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8b9096;
+  }
+  .dark {
+    margin: 34px -20px -48px; padding: 44px 20px;
+    background: #17191c; display: grid; place-items: center;
+    border-top: 1px solid #d3d7db;
+  }
+  .dark .panel {
+    --menu: #202226; --ink: #f2f3f5; --dim: #a8adb4; --faint: #7d828a;
+    --line: #ffffff20; --hover: #ffffff0f;
+    --shadow: 0 0 0 .5px #ffffff24, 0 8px 28px #00000066;
+  }
+  .dark .badge { background: #ffffff0d; }
+  .dark .dot { border-color: #ffffff26; }
+  .dark .sw { background: #ffffff26; }
+  .dark .sw[aria-checked='true'] { background: #f2f3f5; }
+  .dark .sw[aria-checked='true'] i { background: #202226; }
+  .dark .label { position: static; color: #6c727a; margin-bottom: 22px; }
+</style>
+</head>
+<body>
+<div class="label">Direction C · Grouped by state</div>
+
+<div class="panel" role="dialog" aria-label="MCP 连接">
+  <div class="head">
+    <span class="title">MCP 连接</span>
+    <span class="badge"><i></i>1 个在用</span>
+  </div>
+
+  <div class="group">
+    <div class="glabel"><span>已连接</span><em>1</em></div>
+    <div class="row" data-on="true">
+      <span class="dot"></span>
+      <span class="body">
+        <span class="name">chrome</span>
+        <span class="meta">chrome-devtools-mcp · stdio</span>
+      </span>
+      <span class="tools">32 工具</span>
+      <button class="sw" role="switch" aria-checked="true" aria-label="关闭 chrome"><i></i></button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="glabel"><span>未连接</span><em>2</em></div>
+    <div class="row">
+      <span class="dot"></span>
+      <span class="body">
+        <span class="name">mysql</span>
+        <span class="meta">mcp-server-mysql · stdio</span>
+      </span>
+      <span class="tools" data-off="true">—</span>
+      <button class="sw" role="switch" aria-checked="false" aria-label="连接 mysql"><i></i></button>
+    </div>
+    <div class="row">
+      <span class="dot"></span>
+      <span class="body">
+        <span class="name">mysqlob</span>
+        <span class="meta">mcp-server-mysql · stdio</span>
+      </span>
+      <span class="tools" data-off="true">—</span>
+      <button class="sw" role="switch" aria-checked="false" aria-label="连接 mysqlob"><i></i></button>
+    </div>
+  </div>
+
+  <div class="foot">
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3">
+      <rect x="1.4" y="1.4" width="9.2" height="9.2" rx="2"/>
+      <path d="M3.6 6l1.7 1.7L8.6 4.4"/>
+    </svg>
+    按工作区记录，重启后恢复
+  </div>
+</div>
+
+<div class="dark">
+  <div class="label">Dark</div>
+  <div class="panel" role="dialog" aria-label="MCP 连接">
+    <div class="head">
+      <span class="title">MCP 连接</span>
+      <span class="badge"><i></i>1 个在用</span>
+    </div>
+    <div class="group">
+      <div class="glabel"><span>已连接</span><em>1</em></div>
+      <div class="row" data-on="true">
+        <span class="dot"></span>
+        <span class="body">
+          <span class="name">chrome</span>
+          <span class="meta">chrome-devtools-mcp · stdio</span>
+        </span>
+        <span class="tools">32 工具</span>
+        <button class="sw" role="switch" aria-checked="true" aria-label="关闭 chrome"><i></i></button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="glabel"><span>未连接</span><em>2</em></div>
+      <div class="row">
+        <span class="dot"></span>
+        <span class="body">
+          <span class="name">mysql</span>
+          <span class="meta">mcp-server-mysql · stdio</span>
+        </span>
+        <span class="tools" data-off="true">—</span>
+        <button class="sw" role="switch" aria-checked="false" aria-label="连接 mysql"><i></i></button>
+      </div>
+      <div class="row">
+        <span class="dot"></span>
+        <span class="body">
+          <span class="name">mysqlob</span>
+          <span class="meta">mcp-server-mysql · stdio</span>
+        </span>
+        <span class="tools" data-off="true">—</span>
+        <button class="sw" role="switch" aria-checked="false" aria-label="连接 mysqlob"><i></i></button>
+      </div>
+    </div>
+    <div class="foot">
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3">
+        <rect x="1.4" y="1.4" width="9.2" height="9.2" rx="2"/>
+        <path d="M3.6 6l1.7 1.7L8.6 4.4"/>
+      </svg>
+      按工作区记录，重启后恢复
+    </div>
+  </div>
+</div>
+</body>
+</html>

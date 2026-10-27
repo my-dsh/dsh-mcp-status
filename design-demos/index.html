@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>三方向并排 · MCP 连接面板</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #e9ebee; padding: 40px 32px 56px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    -webkit-font-smoothing: antialiased; color: #0f1115;
+  }
+  h1 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .sub { margin-top: 5px; font-size: 12.5px; color: #61666b; }
+  .cols { margin-top: 30px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; align-items: start; }
+  .col > .cap { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  .col > .cap b { font-size: 13px; font-weight: 600; }
+  .col > .cap span { font-size: 11.5px; color: #81858c; }
+  .frame { background: #fff; border-radius: 12px; padding: 22px 16px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 8px 24px rgba(0,0,0,.05);
+           display: grid; place-items: center; }
+  .note { margin-top: 13px; font-size: 11.5px; line-height: 17px; color: #61666b; }
+  .note b { color: #0f1115; font-weight: 600; }
+  .shot { width: 100%; border-radius: 8px; display: block; }
+</style>
+</head>
+<body>
+  <h1>MCP 连接面板 · 三个方向</h1>
+  <p class="sub">同一份内容、同一种尺寸（340px），只换设计骨架。亮色在上、暗色在下。</p>
+
+  <div class="cols">
+    <div class="col">
+      <div class="cap"><b>A · 台账</b><span>Vignelli / 横线秩序</span></div>
+      <div class="frame"><img class="shot" src="dir-1.png" alt="方向 A"></div>
+      <p class="note"><b>骨架</b>：一条硬左轴、发丝线分栏，只有两级字号。<br>
+      <b>胆量</b>：工具数做成行内最大的数字——它是「真连上了」的唯一证据。<br>
+      <b>气质</b>：冷静、机械，像机房台账。</p>
+    </div>
+    <div class="col">
+      <div class="cap"><b>C · 分组</b><span>Linear settings / 按状态分组</span></div>
+      <div class="frame"><img class="shot" src="dir-2.png" alt="方向 C"></div>
+      <p class="note"><b>骨架</b>：按「已连接 / 未连接」分组，组内 44px 行。<br>
+      <b>胆量</b>：列表不按字母排，按答案排——打开就知道谁活着，不用逐行读。<br>
+      <b>气质</b>：现代、克制。</p>
+    </div>
+    <div class="col">
+      <div class="cap"><b>D · 图标行</b><span>Raycast Store / 图标位</span></div>
+      <div class="frame"><img class="shot" src="dir-3.png" alt="方向 D"></div>
+      <p class="note"><b>骨架</b>：每行一个 30px 图标位，图标描边就是状态色。<br>
+      <b>胆量</b>：按 transport 给每台服务器不同图形，三行先靠脸分辨。<br>
+      <b>气质</b>：亲和、可扫。</p>
+    </div>
+  </div>
+</body>
+</html>
