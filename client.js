@@ -212,19 +212,22 @@ window.__ModuleLoader__.load({
       }, [open, rootRef, panelRef, setOpen])
     }
 
-    /** Read the Host's connection list. */
-    async function readList(signal) {
-      const response = await fetch(LIST_ROUTE, { signal, headers: { accept: 'application/json' } })
+    /** Read the connection list for one Session's workspace. */
+    async function readList(sessionId, signal) {
+      const response = await fetch(
+        LIST_ROUTE + '?sessionId=' + encodeURIComponent(sessionId),
+        { signal, headers: { accept: 'application/json' } },
+      )
       if (!response.ok) throw new Error('HTTP ' + response.status)
       return await response.json()
     }
 
-    /** Switch one row; resolves to the Host's compact result. */
-    async function writeRow(entryId, enabled) {
+    /** Switch one row for one Session's workspace; resolves to the Host's result. */
+    async function writeRow(sessionId, entryId, enabled) {
       const response = await fetch(SET_ROUTE, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ entryId, enabled }),
+        body: JSON.stringify({ sessionId, entryId, enabled }),
       })
       try {
         return await response.json()
@@ -250,6 +253,9 @@ window.__ModuleLoader__.load({
     /** The composer-toolbar trigger and its connection panel. */
     function McpStatus(props) {
       const t = props.t
+      // The Session in view decides the workspace, and each workspace keeps its
+      // own switches: switching Sessions must reload rather than reuse the list.
+      const sessionId = props.sessionId
       const [open, setOpen] = React.useState(false)
       const [snapshot, setSnapshot] = React.useState(null)
       const [error, setError] = React.useState(false)
@@ -261,8 +267,9 @@ window.__ModuleLoader__.load({
       useDismiss(rootRef, panelRef, open, setOpen)
 
       const reload = React.useCallback(async (signal) => {
+        if (sessionId === undefined) return
         try {
-          const next = await readList(signal)
+          const next = await readList(sessionId, signal)
           if (signal && signal.aborted) return
           setSnapshot(next)
           setError(false)
@@ -270,10 +277,13 @@ window.__ModuleLoader__.load({
           if (cause && cause.name === 'AbortError') return
           setError(true)
         }
-      }, [])
+      }, [sessionId])
 
-      // One read on mount so the closed trigger can show a summary.
+      // One read on mount so the closed trigger can show a summary. A different
+      // Session clears the previous workspace's rows first, so the panel never
+      // shows one workspace's switches while another is in view.
       React.useEffect(() => {
+        setSnapshot(null)
         const controller = new AbortController()
         void reload(controller.signal)
         return () => controller.abort()
@@ -314,7 +324,7 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setNote(null)
         try {
-          const result = await writeRow(row.entryId, row.enabled !== true)
+          const result = await writeRow(sessionId, row.entryId, row.enabled !== true)
           if (!result.ok) {
             if (result.application === 'restart-required') {
               setNote({ text: t('failure.restartRequired'), bad: true })
