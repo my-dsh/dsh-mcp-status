@@ -5,8 +5,8 @@
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 MCP 连接面板插件。
 
 它在对话输入框下方的工具栏里加一个按钮，列出本机所有 MCP 服务器，并逐个开关连接。
-**开关状态按工作区存在本机 SQLite 里**：每个工作区记住自己开着的服务器，切换工作区不会串；
-重启后恢复，全新安装时一个都不连。
+**开关状态存在本机 SQLite 里，整机生效**：这个窗口里打开的服务，另一个窗口、另一个工作区
+的会话也照样在用；重启后恢复，全新安装时一个都不连。
 
 ## 为什么需要它
 
@@ -16,7 +16,7 @@ DSH 里每个 MCP 服务器都是一行 `@deepseek-ai/dsh-mcp-client`。这些�
 连接尝试。
 
 本插件把「要不要连」这件事从启动时挪到用户手上：行保留为纯配置，连接由面板按需建立，
-而你的选择按工作区记在 SQLite 里，重启和切换工作区都照旧恢复。
+而你的选择记在 SQLite 里，重启后照旧恢复。
 
 ## 安装
 
@@ -59,7 +59,7 @@ dsh plugin --profile web add @my-dsh/dsh-mcp-status
 - 元信息只放**能区分这台服务器的那一点**（URL 的 host、脚本名或传输方式），完整命令行
   在 `title` 里悬停可见，不在 320px 里挤成一坨截断的碎片。
 - 字号已按可读性下限校准：服务器名 13px、其余正文与标签 12px（原本有 10px/11px 的）。
-- 面板打开时每 4 秒刷新一次；关闭时不发请求。
+- 面板打开时每 4 秒刷新一次；关闭时不发请求。刷新只是读状态，**不会动任何连接**。
 - 尺寸与相邻 chip 一致：高 28px、`radius-sm`、13px/20px、同样的 hover 底色。
 - 亮色与暗色都只用 DSH 主题令牌，切主题不会花；正文对比度实测 ≥5.6:1。
 - 中英文案跟随界面语言。
@@ -74,23 +74,25 @@ dsh plugin --profile web add @my-dsh/dsh-mcp-status
 （transport / command / args / env / url），但被置为 `disabled: true`，Loader 不再挂载它们，
 所以启动时零连接、零重连计时器。
 
-**开关按工作区记在 SQLite 里。** 一个 `node:sqlite` 数据库（默认
-`$DSH_HOME/mcp-status/mcp-status.db`）保存 `mcp_state(workspace, server, enabled)` 表，以
-**工作区目录**和 `serverName` 为联合主键。工作区由当前会话的目录向上匹配已注册的工作区得出
-（与 `dsh-skills-status` 同一套规则）。**某个工作区里没有记录的服务器视为关闭**，所以全新安装、
-以及每个新建的工作区，启动时都连零个服务器。
+**开关记在 SQLite 里，整机一份。** 一个 `node:sqlite` 数据库（默认
+`$DSH_HOME/mcp-status/mcp-status.db`）保存 `mcp_state(server, enabled)` 表，以 `serverName`
+为主键。**没有记录的服务器视为关闭**，所以全新安装启动时连零个服务器。
 
-**连接由面板接管。** 打开开关时，插件先为当前工作区写一行 `enabled=1`，再用该行的配置在自己的
-context 里挂载官方 `dsh-mcp-client` 插件，工具与资源照旧注册到 `ctx.tools`；关闭开关时删掉那行
-并 dispose 掉挂载，传输关闭、工具注销。
+MCP 连接本来就是整机共享的：每个 `mcp-client` 实例都把工具注册到同一个全局注册表，同一个
+`serverName` 同一时刻也只能有一个活着的实例。所以一份开关才是唯一说得通的那份——**你在任何
+窗口打开的服务，所有会话都能用**。
 
-**切换工作区会重新协调。** MCP 连接是整机共享的（工具落在同一个全局注册表），所以同一时刻只有
-一个工作区的那套连接在线。面板在读取列表时把当前会话所属工作区的记录应用上去：**进入一个工作区
-就连它记录的服务器、断开别的工作区持有的连接**，因此切换工作区绝不会继承上一个工作区的状态。
+**连接由面板接管。** 打开开关时，插件先写一行 `enabled=1`，再用该行的配置在自己的 context 里
+挂载官方 `dsh-mcp-client` 插件，工具与资源照旧注册到 `ctx.tools`；关闭开关时删掉那行并 dispose
+掉挂载，传输关闭、工具注销。
 
-**重启后恢复。** 插件激活后（等 Loader 把行树装完）按默认目录的工作区恢复一次；随后查看任何
-工作区的会话时再按该工作区协调。连接失败不会把记录卡在「开」——失败时立即删除那行，面板显示
-失败原因，下次启动不会再无谓重试。
+**读列表不会重连。** 面板的 `list` 路由是纯投影：它报告每一行此刻的 phase、工具数和记录的开关，
+不做任何连接动作。**只有开关操作和启动恢复**会真的挂载或卸载——这是关键，否则第二个窗口、
+第二个会话每读一次列表就把别人正在用的连接拆掉一次（早期按工作区协调的版本正是这样，
+表现为工具在会话中途反复「新增/移除」，甚至调用时报 `unknown tool`）。
+
+**重启后恢复。** 插件激活后（等 Loader 把行树装完）按数据库恢复一次，与任何会话、任何目录无关。
+连接失败不会把记录卡在「开」——失败时立即删除那行，面板显示失败原因，下次启动不会再无谓重试。
 
 **一条兼容路径。** 如果某个行在 profile 里仍是启用状态，面板会如实显示为「已连接（由该行
 自己维护）」，此时关闭开关会走 Plugin Manager 把 `disabled: true` 持久化——这样开关的含义
@@ -100,12 +102,12 @@ context 里挂载官方 `dsh-mcp-client` 插件，工具与资源照旧注册到
 
 两条都在需要认证的 `/api` 通道上，客户端用同源 `fetch('api/...')` 调用。
 
-- `GET api/mcp-status.list?sessionId=<id>` → `{ workspace, servers: [{ entryId, serverName,
-  transport, target, enabled, connected, phase, tools, editable }] }`
-- `POST api/mcp-status.set` `{ sessionId, entryId, enabled }` → `{ ok, application, status }`；
+- `GET api/mcp-status.list` → `{ servers: [{ entryId, serverName, transport, target, enabled,
+  connected, phase, tools, editable }] }`
+- `POST api/mcp-status.set` `{ entryId, enabled }` → `{ ok, application, status }`；
   连不上时 `{ ok: false, reason: 'connect-failed', diagnostic }`
 
-两条都要 `sessionId`：它决定这次读写的**工作区**。
+两条都不需要 `sessionId`：开关是整机的，读也只是一次投影。
 
 ## 配置
 
@@ -125,14 +127,15 @@ context 里挂载官方 `dsh-mcp-client` 插件，工具与资源照旧注册到
     restoreDelayMs: 1200
 ```
 
-想清空所有工作区的开关记录，直接删掉数据库文件即可（下次启动会重建空表）：
+想清空开关记录，直接删掉数据库文件即可（下次启动会重建空表）：
 
 ```sh
 rm ~/.dsh/mcp-status/mcp-status.db*
 ```
 
-从早期「整机一份」的版本升级时，旧表（只有 `server` 主键）会被丢弃重建——那些记录无法归属到
-某个工作区，因此不会带入任何一个工作区。
+从「按工作区记」的版本升级时，旧表（`workspace, server` 联合主键）会自动折叠成整机一份：
+**任何一个工作区里记着「开」的服务器都保留为开**，其余丢弃。按工作区拆开的那套判断正是
+两个会话互相拆连接的原因，折叠是这次升级的一部分，不需要手动处理。
 
 ## 依赖
 
@@ -147,7 +150,7 @@ Client 半是纯 JavaScript（`React.createElement`，无构建步骤），只 r
 
 ```
 dsh-mcp-status/
-├── index.js            # Host 半：按工作区的 SQLite 开关库、读 MCP 行、挂载/卸载连接、两条 /api 路由
+├── index.js            # Host 半：整机的 SQLite 开关库、读 MCP 行、挂载/卸载连接、两条 /api 路由
 ├── client.js           # Client 半：工具栏按钮与面板
 ├── cordis.patch.yml    # bundle 补丁：插入 mcp-status 行
 ├── locale/

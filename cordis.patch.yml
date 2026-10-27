@@ -5,7 +5,8 @@
 # `@deepseek-ai/dsh-mcp-client` rows (serverName, transport, persisted
 # enablement, live fiber phase, registered tool count) and opens or closes each
 # connection on demand. Which servers stay connected is remembered in one SQLite
-# database, so a restart restores exactly the set the user left on.
+# database, machine-wide — MCP connections are global anyway, so the set is
+# shared by every Session — and a restart restores exactly what was left on.
 #
 # Keep the MCP rows themselves disabled in the profile (`disabled: true`) so the
 # Loader mounts none of them: the panel is the only thing that connects, which is

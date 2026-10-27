@@ -19,7 +19,7 @@ window.__ModuleLoader__.load({
       'trigger.summary': 'MCP {on}/{total}',
       'trigger.aria': 'MCP 连接：{on}/{total}，点击查看',
       'panel.title': 'MCP 连接',
-      'panel.subtitle': '按工作区记录，重启后恢复',
+      'panel.subtitle': '整机生效，重启后恢复',
       'panel.close': '关闭',
       'panel.refresh': '刷新',
       'panel.refreshing': '刷新中…',
@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({
       'trigger.summary': 'MCP {on}/{total}',
       'trigger.aria': 'MCP connections: {on}/{total}. Open the panel',
       'panel.title': 'MCP connections',
-      'panel.subtitle': 'Recorded per workspace, restored on restart',
+      'panel.subtitle': 'Machine-wide, restored on restart',
       'panel.close': 'Close',
       'panel.refresh': 'Refresh',
       'panel.refreshing': 'Refreshing…',
@@ -299,22 +299,25 @@ window.__ModuleLoader__.load({
       }, [open, rootRef, panelRef, setOpen])
     }
 
-    /** Read the connection list for one Session's workspace. */
-    async function readList(sessionId, signal) {
-      const response = await fetch(
-        LIST_ROUTE + '?sessionId=' + encodeURIComponent(sessionId),
-        { signal, headers: { accept: 'application/json' } },
-      )
+    /**
+     * Read the connection list.
+     *
+     * The switches are machine-wide, so the answer does not depend on which
+     * Session is in view — and, by design, asking for it never moves a
+     * connection.
+     */
+    async function readList(signal) {
+      const response = await fetch(LIST_ROUTE, { signal, headers: { accept: 'application/json' } })
       if (!response.ok) throw new Error('HTTP ' + response.status)
       return await response.json()
     }
 
-    /** Switch one row for one Session's workspace; resolves to the Host's result. */
-    async function writeRow(sessionId, entryId, enabled) {
+    /** Switch one row; resolves to the Host's result. */
+    async function writeRow(entryId, enabled) {
       const response = await fetch(SET_ROUTE, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId, entryId, enabled }),
+        body: JSON.stringify({ entryId, enabled }),
       })
       try {
         return await response.json()
@@ -397,9 +400,6 @@ window.__ModuleLoader__.load({
     /** The composer-toolbar trigger and its connection panel. */
     function McpStatus(props) {
       const t = props.t
-      // The Session in view decides the workspace, and each workspace keeps its
-      // own switches: switching Sessions must reload rather than reuse the list.
-      const sessionId = props.sessionId
       const [open, setOpen] = React.useState(false)
       const [snapshot, setSnapshot] = React.useState(null)
       const [error, setError] = React.useState(false)
@@ -411,9 +411,8 @@ window.__ModuleLoader__.load({
       useDismiss(rootRef, panelRef, open, setOpen)
 
       const reload = React.useCallback(async (signal) => {
-        if (sessionId === undefined) return
         try {
-          const next = await readList(sessionId, signal)
+          const next = await readList(signal)
           if (signal && signal.aborted) return
           setSnapshot(next)
           setError(false)
@@ -421,11 +420,10 @@ window.__ModuleLoader__.load({
           if (cause && cause.name === 'AbortError') return
           setError(true)
         }
-      }, [sessionId])
+      }, [])
 
-      // One read on mount so the closed trigger can show a summary. A different
-      // Session clears the previous workspace's rows first, so the panel never
-      // shows one workspace's switches while another is in view.
+      // One read on mount so the closed trigger can show a summary. The switches
+      // are machine-wide, so this answer holds for every Session in the window.
       React.useEffect(() => {
         setSnapshot(null)
         const controller = new AbortController()
@@ -468,7 +466,7 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setNote(null)
         try {
-          const result = await writeRow(sessionId, row.entryId, row.enabled !== true)
+          const result = await writeRow(row.entryId, row.enabled !== true)
           if (!result.ok) {
             if (result.application === 'restart-required') {
               setNote({ text: t('failure.restartRequired'), bad: true })

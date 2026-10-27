@@ -9,26 +9,28 @@
  * rows remain the single source of truth for a server's transport, command,
  * arguments, environment and URL.
  *
- * **The database is the switch, and it is per workspace.** One `node:sqlite`
- * database holds an `mcp_state(workspace, server, enabled)` table keyed by the
- * workspace's canonical directory and the server's `serverName`. Each workspace
- * therefore keeps its own set of connected servers: switching to another
- * workspace must not inherit the previous one's connections. A server with no
- * row in a workspace is off, which keeps a fresh install — and every newly added
- * workspace — connecting to nothing.
+ * **The database is the switch, and it is machine-wide.** One `node:sqlite`
+ * database holds an `mcp_state(server, enabled)` table keyed by the server's
+ * `serverName`. MCP connections are machine-wide by construction — every
+ * `mcp-client` instance registers its tools into one global registry, and a
+ * `serverName` may be held by one live instance at a time — so one set of
+ * switches is the only set that can be true. A server with no row is off, which
+ * keeps a fresh install connecting to nothing.
  *
- * **The panel owns connections.** Switching a server on writes the row for the
- * current workspace and mounts the shipped `dsh-mcp-client` plugin in this
- * plugin's context with that row's own config, so its tools and resources
- * register exactly as before; switching it off writes the row and disposes that
- * mount, which closes the transport and unregisters the tools. MCP connections
- * are machine-wide, so the panel reconciles them against the workspace of the
- * Session currently in view: entering a workspace connects what that workspace
- * recorded and drops what another one held.
+ * **Reading never reconnects.** The list route is a pure projection: it reports
+ * the live phase, tool count and recorded switch of every row and changes
+ * nothing. Only a switch operation and the startup restore move connections,
+ * which is what keeps a second Session, tab or workspace from tearing down a
+ * connection another one is using.
+ *
+ * **The panel owns connections.** Switching a server on writes the row and
+ * mounts the shipped `dsh-mcp-client` plugin in this plugin's context with that
+ * row's own config, so its tools and resources register exactly as before;
+ * switching it off writes the row and disposes that mount, which closes the
+ * transport and unregisters the tools.
  *
  * **Two authenticated routes** answer the composer-toolbar component: the row
- * inventory with live phase and tool counts for one Session's workspace, and one
- * switch operation.
+ * inventory with live phase and tool counts, and one switch operation.
  *
  * Only Node builtins are imported. The MCP plugin is loaded through the Loader
  * (`ctx.loader.import`), so the bundle declares no dependencies.
@@ -36,16 +38,18 @@
  * @module @my-dsh/dsh-mcp-status
  */
 
-import { chmodSync, mkdirSync, realpathSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 /**
  * Services the bundle reads directly. Cordis only exposes a service on `ctx`
- * when the plugin declares it, so every required access is listed here.
+ * when the plugin declares it, so every required access is listed here. The
+ * switches are machine-wide, so the panel no longer needs a Session's directory
+ * to answer: it reads Loader rows, the tool registry and the database.
  */
-export const inject = ['agents', 'workingDirectory']
+export const inject = []
 
 /** Module name of the plugin each managed row runs. */
 const MCP_CLIENT_PLUGIN = '@deepseek-ai/dsh-mcp-client'
@@ -155,95 +159,6 @@ function toolCount(ctx, serverName) {
 }
 
 /**
- * Canonicalize a directory the way the workspace registry does, so a symlinked
- * Session directory still matches its workspace.
- * @param path - absolute directory.
- * @returns the real path, or the input when it cannot be resolved.
- */
-function canonical(path) {
-  try {
-    return realpathSync(path)
-  } catch {
-    return path
-  }
-}
-
-/**
- * Resolve the workspace a directory belongs to: the deepest registered
- * workspace containing it, or the directory itself when none does.
- *
- * The same rule the skills panel uses, so both plugins agree about what "the
- * current workspace" means. The key is the canonical directory, which is stable
- * across renames of the workspace title.
- * @param ctx - context carrying the optional `workspaceRegistry`.
- * @param cwd - the Session's effective directory.
- * @returns the workspace key plus its display fields.
- */
-function workspaceFor(ctx, cwd) {
-  const registry = ctx.get('workspaceRegistry')
-  const workspaces = registry === undefined ? [] : registry.list()
-  const target = canonical(cwd)
-  let best
-  for (const workspace of workspaces) {
-    const base = canonical(workspace.path)
-    const rel = relative(base, target)
-    const inside = rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
-    if (!inside) continue
-    if (best === undefined || base.length > best.base.length) best = { base, workspace }
-  }
-  if (best !== undefined) {
-    const { workspace, base } = best
-    return { key: base, id: String(workspace.id), title: workspace.title, path: workspace.path }
-  }
-  return { key: target, id: null, title: basename(target), path: cwd }
-}
-
-/**
- * Read a Session's effective directory without requiring a live Agent.
- * @param ctx - context carrying `agents`, `workingDirectory`, and optional `sessionQuery`.
- * @param sessionId - Session identity.
- * @returns the absolute directory.
- */
-async function directoryOf(ctx, sessionId) {
-  // Both services are declared in `inject`, so Cordis guarantees them before
-  // `apply` runs; the guards keep a test harness or a partial composition from
-  // turning a missing service into a thrown request.
-  const agents = ctx.get('agents')
-  const workingDirectory = ctx.get('workingDirectory')
-  const fallback = typeof workingDirectory?.defaultDirectory === 'string'
-    ? workingDirectory.defaultDirectory
-    : homedir()
-  if (workingDirectory === undefined) return fallback
-  const live = agents?.get(sessionId)
-  if (live !== undefined) {
-    try {
-      return await workingDirectory.ensure(live)
-    } catch (error) {
-      ctx.logger.warn('mcp-status: could not resolve the directory of %s: %s', sessionId, String(error))
-      return fallback
-    }
-  }
-  const query = ctx.get('sessionQuery')
-  if (query === undefined) return fallback
-  try {
-    const observation = await query.observeSession(sessionId)
-    try {
-      const projected = observation.projections?.values?.workingDirectory
-      const header = observation.header?.cwd
-      if (typeof projected === 'string' && projected !== '') return projected
-      if (typeof header === 'string' && header !== '') return header
-      return fallback
-    } finally {
-      const dispose = observation[Symbol.dispose]
-      if (typeof dispose === 'function') dispose.call(observation)
-    }
-  } catch (error) {
-    ctx.logger.warn('mcp-status: could not inspect %s: %s', sessionId, String(error))
-    return fallback
-  }
-}
-
-/**
  * Build one JSON response with no caching.
  * @param status - HTTP status code.
  * @param body - lossless JSON payload.
@@ -256,11 +171,11 @@ function json(status, body) {
 /**
  * Open the switch database, creating its parent owner-only.
  *
- * Switches are recorded per workspace, so each workspace keeps its own set of
- * connected servers: switching to another workspace must not inherit the
- * previous one's connections. A server with no row in a workspace is off, which
- * keeps a fresh install — and every newly added workspace — connecting to
- * nothing.
+ * Switches are machine-wide, because MCP connections are: every `mcp-client`
+ * instance registers its tools into one global registry and a `serverName` can
+ * be held by only one live instance, so one set of switches is the only set
+ * that can be true. A server with no row is off, which keeps a fresh install
+ * connecting to nothing.
  * @param path - absolute database path.
  * @returns the store with its queries and the close operation.
  */
@@ -277,68 +192,50 @@ function openStore(path) {
   }
   db.exec('PRAGMA busy_timeout = 5000')
   db.exec('PRAGMA journal_mode = WAL')
-  // An earlier build keyed rows by server alone. Those rows carry no workspace
-  // and cannot be attributed to one, so the table is recreated with the
-  // composite key rather than silently adopting a machine-wide default.
-  const legacy = db.prepare('PRAGMA table_info(mcp_state)').all()
-  const hasWorkspace = legacy.some(column => column.name === 'workspace')
-  if (legacy.length > 0 && !hasWorkspace) db.exec('DROP TABLE mcp_state')
+  migratePerWorkspace(db)
   db.exec(`CREATE TABLE IF NOT EXISTS mcp_state (
-    workspace TEXT NOT NULL,
-    server TEXT NOT NULL,
+    server TEXT NOT NULL PRIMARY KEY,
     enabled INTEGER NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (workspace, server)
+    updated_at TEXT NOT NULL
   )`)
-  const selectWorkspace = db.prepare('SELECT server, enabled FROM mcp_state WHERE workspace = ?')
-  const selectOne = db.prepare('SELECT enabled FROM mcp_state WHERE workspace = ? AND server = ?')
-  const upsert = db.prepare(`INSERT INTO mcp_state (workspace, server, enabled, updated_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(workspace, server) DO UPDATE SET
+  const selectAll = db.prepare('SELECT server, enabled FROM mcp_state')
+  const selectOne = db.prepare('SELECT enabled FROM mcp_state WHERE server = ?')
+  const upsert = db.prepare(`INSERT INTO mcp_state (server, enabled, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(server) DO UPDATE SET
       enabled = excluded.enabled,
       updated_at = excluded.updated_at`)
-  const drop = db.prepare('DELETE FROM mcp_state WHERE workspace = ? AND server = ?')
+  const drop = db.prepare('DELETE FROM mcp_state WHERE server = ?')
   let closed = false
   return {
     /**
-     * Every switch recorded for one workspace.
-     * @param workspace - workspace key.
+     * Every recorded switch.
      * @returns the `serverName → enabled` map.
      */
-    read(workspace) {
+    read() {
       const result = new Map()
-      for (const row of selectWorkspace.all(workspace)) result.set(String(row.server), row.enabled !== 0)
+      for (const row of selectAll.all()) result.set(String(row.server), row.enabled !== 0)
       return result
     },
     /**
-     * One switch recorded for one workspace.
-     * @param workspace - workspace key.
+     * One recorded switch.
      * @param server - configured namespace.
-     * @returns the recorded state, or undefined when this workspace never switched it.
+     * @returns the recorded state, or undefined when this server was never switched.
      */
-    one(workspace, server) {
-      const row = selectOne.get(workspace, server)
+    one(server) {
+      const row = selectOne.get(server)
       return row === undefined ? undefined : row.enabled !== 0
     },
     /**
-     * Record one switch for one workspace. An enabled server keeps its row so
-     * the panel can restore it; a disabled one drops the row, which is the same
-     * state a workspace that never switched it is in.
-     * @param workspace - workspace key.
+     * Record one switch. An enabled server keeps its row so the panel can
+     * restore it; a disabled one drops the row, which is the same state a
+     * server that was never switched is in.
      * @param server - configured namespace.
      * @param enabled - whether the server should stay connected.
      */
-    write(workspace, server, enabled) {
-      if (enabled) upsert.run(workspace, server, 1, new Date().toISOString())
-      else drop.run(workspace, server)
-    },
-    /**
-     * Every workspace that records at least one enabled server.
-     * @returns the workspace keys, so the Host knows which ones to restore.
-     */
-    workspacesWithEnabled() {
-      const rows = db.prepare('SELECT DISTINCT workspace FROM mcp_state WHERE enabled = 1').all()
-      return rows.map(row => String(row.workspace))
+    write(server, enabled) {
+      if (enabled) upsert.run(server, 1, new Date().toISOString())
+      else drop.run(server)
     },
     /** Close the connection once. */
     close() {
@@ -347,6 +244,35 @@ function openStore(path) {
       db.close()
     },
   }
+}
+
+/**
+ * Collapse a per-workspace table into the machine-wide one, once.
+ *
+ * An earlier build keyed rows by `(workspace, server)`. Those rows described one
+ * machine-wide set of connections split into per-workspace opinions, which is
+ * what made two Sessions in different workspaces disconnect each other. The
+ * intent the user expressed is "keep this server on", wherever it was stated, so
+ * the migration keeps every server that is on in at least one workspace and
+ * drops the rest. An older table keyed by `server` alone is already the target
+ * shape and is left untouched.
+ * @param db - open database handle.
+ */
+function migratePerWorkspace(db) {
+  const columns = db.prepare('PRAGMA table_info(mcp_state)').all()
+  if (!columns.some(column => column.name === 'workspace')) return
+  const enabled = new Set(
+    db.prepare('SELECT DISTINCT server FROM mcp_state WHERE enabled = 1').all().map(row => String(row.server)),
+  )
+  db.exec('DROP TABLE mcp_state')
+  db.exec(`CREATE TABLE mcp_state (
+    server TEXT NOT NULL PRIMARY KEY,
+    enabled INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+  const insert = db.prepare('INSERT OR REPLACE INTO mcp_state (server, enabled, updated_at) VALUES (?, 1, ?)')
+  const now = new Date().toISOString()
+  for (const server of enabled) insert.run(server, now)
 }
 
 /**
@@ -516,52 +442,36 @@ function createState(ctx, options) {
   }
 
   /**
-   * The workspace whose switches are currently applied to the live connections.
+   * Apply the recorded switches to the live connections.
    *
-   * MCP connections are machine-wide — the tools land in one global registry —
-   * so only one workspace's set can be connected at a time. This is the one in
-   * view, and moving to another workspace reconciles against it.
-   */
-  let activeWorkspace
-
-  /**
-   * Apply one workspace's recorded switches to the live connections.
-   *
-   * Entering a workspace connects what it recorded and drops what another
-   * workspace held, so switching workspaces never inherits the previous one's
-   * connections. A row the profile itself enables is left alone: the Loader owns
-   * that connection, and mounting a second instance would collide on its
+   * This is the one place that opens and closes connections, and it runs only
+   * from the startup restore and from a switch operation — never from a read.
+   * A row the profile itself enables is left alone: the Loader owns that
+   * connection, and mounting a second instance would collide on its
    * `serverName`.
-   * @param workspace - the workspace key to apply.
+   * @param wanted - the `serverName` set the database says should be connected.
    */
-  const applyWorkspace = async (workspace) => {
-    if (workspace === activeWorkspace) return
-    const recorded = getStore()?.read(workspace) ?? new Map()
-    const wanted = new Set()
-    for (const { entry, serverName } of rows()) {
-      if (recorded.get(serverName) === true && entry.disabled) wanted.add(serverName)
-    }
-    // Drop connections this workspace does not want. A row-owned connection is
-    // not ours to drop, and is not in `mounted` either.
+  const applySwitches = async (wanted) => {
+    // Drop connections that are no longer wanted. A row-owned connection is not
+    // ours to drop, and is not in `mounted` either.
     for (const serverName of [...mounted.keys()]) {
       if (wanted.has(serverName)) continue
       try {
         await unmount(serverName)
-        ctx.logger.info('mcp-status: disconnected %s for workspace %s', serverName, workspace)
+        ctx.logger.info('mcp-status: disconnected %s', serverName)
       } catch (error) {
         ctx.logger.warn('mcp-status: could not disconnect %s: %s', serverName, String(error))
       }
     }
-    activeWorkspace = workspace
     for (const { config, serverName } of rows()) {
       if (!wanted.has(serverName)) continue
       if (mounted.has(serverName)) continue
       try {
         const outcome = await mount(serverName, config)
         if (outcome.status === 'failed') {
-          ctx.logger.warn('mcp-status: could not connect %s for %s: %s', serverName, workspace, outcome.diagnostic)
+          ctx.logger.warn('mcp-status: could not connect %s: %s', serverName, outcome.diagnostic)
         } else {
-          ctx.logger.info('mcp-status: connected %s for workspace %s', serverName, workspace)
+          ctx.logger.info('mcp-status: connected %s', serverName)
         }
       } catch (error) {
         ctx.logger.warn('mcp-status: could not connect %s: %s', serverName, String(error))
@@ -570,18 +480,31 @@ function createState(ctx, options) {
   }
 
   /**
-   * Project the panel's list for one Session's workspace.
-   * @param sessionId - Session identity, which decides the workspace.
-   * @returns the workspace descriptor and its rows.
+   * The servers the database says should be connected and the profile lets the
+   * panel own: enabled in the record, and a row the Loader does not already
+   * mount itself.
+   * @returns the `serverName` set to apply.
    */
-  const list = async (sessionId) => {
+  const wantedSwitches = () => {
+    const recorded = getStore()?.read() ?? new Map()
+    const wanted = new Set()
+    for (const { entry, serverName } of rows()) {
+      if (recorded.get(serverName) === true && entry.disabled) wanted.add(serverName)
+    }
+    return wanted
+  }
+
+  /**
+   * Project the panel's list.
+   *
+   * A pure read: it reports what the Loader and this plugin currently hold and
+   * what the database records, and touches no connection. Reading from a second
+   * Session, tab or workspace therefore cannot disturb the ones in use.
+   * @returns the rows, plus the machine-wide switch set they were read against.
+   */
+  const list = () => {
     reconcile()
-    const cwd = await directoryOf(ctx, sessionId)
-    const workspace = workspaceFor(ctx, cwd)
-    // Entering the workspace applies its switches before the rows are read, so
-    // the phase and tool counts describe this workspace rather than the last.
-    await applyWorkspace(workspace.key)
-    const recorded = getStore()?.read(workspace.key)
+    const recorded = getStore()?.read()
     const servers = rows().map(({ entry, config, serverName }) => {
       const own = mounted.get(serverName)
       const rowMounted = !entry.disabled
@@ -590,8 +513,8 @@ function createState(ctx, options) {
       const phase = own !== undefined
         ? FIBER_PHASE[own.state] ?? null
         : entry.fiber === undefined ? null : FIBER_PHASE[entry.fiber.state] ?? null
-      // The switch shows this workspace's intent. A row the profile still
-      // enables is connected by the Loader whatever the database says.
+      // The switch shows the recorded intent. A row the profile still enables
+      // is connected by the Loader whatever the database says.
       const recordedState = recorded?.get(serverName)
       const enabled = rowMounted ? true : recordedState === true
       return {
@@ -610,28 +533,24 @@ function createState(ctx, options) {
         editable: true,
       }
     })
-    return { workspace, servers }
+    return { servers }
   }
 
   /**
-   * Switch one server for one Session's workspace.
-   * @param sessionId - Session identity, which decides the workspace.
+   * Switch one server, machine-wide.
    * @param entryId - Loader entry id of the row.
    * @param enabled - desired connection state.
    * @returns a compact result for the panel.
    */
-  const set = async (sessionId, entryId, enabled) => {
+  const set = async (entryId, enabled) => {
     const target = rows().find(row => row.entry.id === entryId)
     if (target === undefined) return { ok: false, reason: 'unknown-plugin' }
     const { entry, config, serverName } = target
-    const cwd = await directoryOf(ctx, sessionId)
-    const workspace = workspaceFor(ctx, cwd)
     const store = getStore()
     if (enabled) {
       // Record the intent first: a slow server must survive the next restart
       // even though this mount is still settling.
-      store?.write(workspace.key, serverName, true)
-      activeWorkspace = workspace.key
+      store?.write(serverName, true)
       if (mounted.has(serverName)) return { ok: true, application: 'applied', status: 'already-connected' }
       // A row the profile still enables is already connected by the Loader, so
       // mounting a second instance would collide on `serverName`. Disabling the
@@ -641,17 +560,16 @@ function createState(ctx, options) {
       try {
         const outcome = await mount(serverName, config)
         if (outcome.status === 'failed') {
-          store?.write(workspace.key, serverName, false)
+          store?.write(serverName, false)
           return { ok: false, reason: 'connect-failed', diagnostic: outcome.diagnostic }
         }
         return { ok: true, application: 'applied', status: outcome.status }
       } catch (error) {
-        store?.write(workspace.key, serverName, false)
+        store?.write(serverName, false)
         return { ok: false, reason: 'connect-failed', diagnostic: String(error?.message ?? error) }
       }
     }
-    store?.write(workspace.key, serverName, false)
-    activeWorkspace = workspace.key
+    store?.write(serverName, false)
     // A row that is still enabled would reconnect at the next start, so the
     // switch also persists its disablement through the Plugin Manager. That
     // reload disposes the row's connection as part of the same change.
@@ -666,19 +584,15 @@ function createState(ctx, options) {
   }
 
   /**
-   * Connect the servers the default workspace recorded as on.
+   * Connect the servers recorded as on.
    *
-   * A restart has no Session in view, so the workspace that opens first decides
-   * the set. This applies the default directory's workspace; any other workspace
-   * is applied when a Session of it is first viewed.
+   * The record is machine-wide, so a restart needs no Session and no directory
+   * to decide the set: it connects exactly what was left on, once the Loader has
+   * built the row tree this restore reads from.
    */
   const restore = async () => {
     try {
-      const workingDirectory = ctx.get('workingDirectory')
-      const cwd = typeof workingDirectory?.defaultDirectory === 'string'
-        ? workingDirectory.defaultDirectory
-        : homedir()
-      await applyWorkspace(workspaceFor(ctx, cwd).key)
+      await applySwitches(wantedSwitches())
     } catch (error) {
       ctx.logger.warn('mcp-status: restore failed: %s', String(error))
     }
@@ -710,12 +624,9 @@ function registerRoutes(ctx, state) {
       path: LIST_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
-      fetch: async (request) => {
-        const sessionId = new URL(request.url).searchParams.get('sessionId')
-        if (sessionId === null || sessionId === '') return json(400, { ok: false, reason: 'invalid-session' })
+      fetch: async () => {
         try {
-          const { workspace, servers } = await state.list(sessionId)
-          return json(200, { servers, workspace })
+          return json(200, state.list())
         } catch (error) {
           return json(500, { error: String(error?.message ?? error) })
         }
@@ -735,9 +646,8 @@ function registerRoutes(ctx, state) {
           return json(400, { ok: false, reason: 'invalid-json' })
         }
         if (body === null || typeof body !== 'object') return json(400, { ok: false, reason: 'invalid-body' })
-        if (typeof body.sessionId !== 'string' || body.sessionId === '') return json(400, { ok: false, reason: 'invalid-session' })
         if (typeof body.entryId !== 'string' || body.entryId === '') return json(400, { ok: false, reason: 'invalid-entry' })
-        const result = await state.set(body.sessionId, body.entryId, body.enabled === true)
+        const result = await state.set(body.entryId, body.enabled === true)
         return json(result.ok ? 200 : 409, result)
       },
     }), 'mcp-status: set route')
