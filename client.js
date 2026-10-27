@@ -16,8 +16,8 @@ window.__ModuleLoader__.load({
     const zh = {
       'trigger.loading': 'MCP',
       'trigger.none': 'MCP 未配置',
-      'trigger.summary': 'MCP {on}/{total} 已连接',
-      'trigger.aria': 'MCP 连接：{on}/{total} 已连接，点击查看',
+      'trigger.summary': 'MCP {on}/{total}',
+      'trigger.aria': 'MCP 连接：{on}/{total}，点击查看',
       'panel.title': 'MCP 连接',
       'panel.subtitle': '按工作区记录，重启后恢复',
       'panel.close': '关闭',
@@ -56,8 +56,8 @@ window.__ModuleLoader__.load({
     const en = {
       'trigger.loading': 'MCP',
       'trigger.none': 'MCP not configured',
-      'trigger.summary': 'MCP {on}/{total} connected',
-      'trigger.aria': 'MCP connections: {on}/{total} connected. Open the panel',
+      'trigger.summary': 'MCP {on}/{total}',
+      'trigger.aria': 'MCP connections: {on}/{total}. Open the panel',
       'panel.title': 'MCP connections',
       'panel.subtitle': 'Recorded per workspace, restored on restart',
       'panel.close': 'Close',

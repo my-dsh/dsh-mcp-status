@@ -41,7 +41,7 @@ Switch your existing MCP rows off so `disabled: true` lands in the profile — o
 
 It sits in the toolbar row below the composer: the same flex container (`.tools`) as the "+" button and the permission chip ("工作区内修改"), immediately to the right of that chip.
 
-- The button reads `MCP 2/3 connected`; the dot on its left shows whether anything is connected (green = connected, red = the read failed).
+- The button reads `MCP 2/3` (connected / total); the dot on its left shows whether anything is connected (green = connected, red = the read failed).
 - Clicking opens a **320px panel whose list is grouped by state** — connected and not connected. Opening it answers "what is running" before a single row's status is read; each group heading carries its own count.
 - Each 44px row holds a status dot, the server name, one line of metadata, the tool count, and a switch. **The tool count gets its own column** (right-aligned, tabular figures) because it is the only proof the connection actually reached something; with no tools it reads `—`.
 - The metadata line carries only what **distinguishes this server** (the URL's host, the script name, or the transport); the full command line is available on hover via `title`, rather than being truncated into fragments at 320px.
