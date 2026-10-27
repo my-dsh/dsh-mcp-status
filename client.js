@@ -139,8 +139,8 @@ window.__ModuleLoader__.load({
 .dshmcp-title { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); letter-spacing: -.005em; }
 .dshmcp-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .dshmcp-ghost {
-  border: none; background: transparent; color: var(--dsw-alias-label-tertiary);
-  font: inherit; font-size: 11px; padding: 3px 7px;
+  border: none; background: transparent; color: var(--dsw-alias-label-secondary);
+  font: inherit; font-size: 12px; padding: 3px 7px;
   border-radius: var(--dsw-radius-sm); cursor: pointer;
 }
 .dshmcp-ghost:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
@@ -151,8 +151,8 @@ window.__ModuleLoader__.load({
 .dshmcp-glabel {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 8px 5px;
-  font-size: 10px; font-weight: 600; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--dsw-alias-label-secondary);
+  font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  color: var(--dsw-alias-label-secondary);
 }
 .dshmcp-glabel > span { flex: none; }
 .dshmcp-glabel > em {
@@ -196,7 +196,7 @@ window.__ModuleLoader__.load({
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dshmcp-meta {
-  font-size: 11px; line-height: 15px; color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -204,7 +204,7 @@ window.__ModuleLoader__.load({
    slot on the control axis instead of being appended to the truncated meta. */
 .dshmcp-tools {
   margin-left: auto; flex: none;
-  font-size: 11.5px; line-height: 15px;
+  font-size: 12px; line-height: 16px;
   font-variant-numeric: tabular-nums; letter-spacing: .01em;
   color: var(--dsw-alias-label-secondary); white-space: nowrap;
 }
@@ -230,7 +230,7 @@ window.__ModuleLoader__.load({
 /* ---- one-line messages: loading, empty, error, operation note ---- */
 .dshmcp-message {
   padding: 2px 14px 10px;
-  font-size: 11.5px; line-height: 17px; color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 17px; color: var(--dsw-alias-label-secondary);
 }
 .dshmcp-message[data-bad='true'] { color: var(--dsw-alias-state-error-primary); }
 
@@ -239,7 +239,7 @@ window.__ModuleLoader__.load({
   display: flex; align-items: center; gap: 6px;
   margin: 6px 6px 0; padding: 9px 8px 7px;
   border-top: 1px solid var(--dsw-alias-border-l1);
-  font-size: 11px; line-height: 15px; color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary);
 }
 .dshmcp-foot svg { flex: none; opacity: .75; }
 .dshmcp-foot[data-bad='true'] { color: var(--dsw-alias-state-error-primary); }
