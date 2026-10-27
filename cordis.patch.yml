@@ -2,17 +2,19 @@
 # button and the Host routes behind it.
 #
 # The row changes no MCP configuration. It reads the profile's
-# `@deepseek-ai/dsh-mcp-client` rows (serverName, transport, persisted
-# enablement, live fiber phase, registered tool count) and opens or closes each
-# connection on demand. Which servers stay connected is remembered in one SQLite
-# database, machine-wide — MCP connections are global anyway, so the set is
-# shared by every Session — and a restart restores exactly what was left on.
+# `@deepseek-ai/dsh-mcp-client` rows (serverName, transport, live fiber phase,
+# registered tool count) and opens or closes each connection on demand.
 #
+# Nothing is persisted. The set of open connections lives in memory for the life
+# of the plugin instance, so every start begins with all servers disconnected and
+# the user opens the ones this run needs. That is the point: a rarely used server
+# never costs a startup connection, a child process, or a reconnect loop nobody
+# asked for.
+
 # Keep the MCP rows themselves disabled in the profile (`disabled: true`) so the
 # Loader mounts none of them: the panel is the only thing that connects, which is
 # what keeps a fresh install from opening any connection at startup.
-#
-# `databasePath` defaults to `$DSH_HOME/mcp-status/mcp-status.db`.
+
 - insert:
     - id: mcp-status
       name: '@my-dsh/dsh-mcp-status'

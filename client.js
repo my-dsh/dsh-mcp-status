@@ -19,7 +19,7 @@ window.__ModuleLoader__.load({
       'trigger.summary': 'MCP {on}/{total}',
       'trigger.aria': 'MCP 连接：{on}/{total}，点击查看',
       'panel.title': 'MCP 连接',
-      'panel.subtitle': '整机生效，重启后恢复',
+      'panel.subtitle': '仅本次运行有效，重启后全部断开',
       'panel.close': '关闭',
       'panel.refresh': '刷新',
       'panel.refreshing': '刷新中…',
@@ -49,7 +49,6 @@ window.__ModuleLoader__.load({
       'reason.invalid-body': '请求无效。',
       'reason.invalid-json': '请求无效。',
       'reason.invalid-entry': '条目无效。',
-      'state.restoring': '恢复中',
     }
 
     /** English copy, key-for-key with {@link zh}. */
@@ -59,7 +58,7 @@ window.__ModuleLoader__.load({
       'trigger.summary': 'MCP {on}/{total}',
       'trigger.aria': 'MCP connections: {on}/{total}. Open the panel',
       'panel.title': 'MCP connections',
-      'panel.subtitle': 'Machine-wide, restored on restart',
+      'panel.subtitle': 'This run only — everything disconnects on restart',
       'panel.close': 'Close',
       'panel.refresh': 'Refresh',
       'panel.refreshing': 'Refreshing…',
@@ -89,7 +88,6 @@ window.__ModuleLoader__.load({
       'reason.invalid-body': 'The request was invalid.',
       'reason.invalid-json': 'The request was invalid.',
       'reason.invalid-entry': 'The row is invalid.',
-      'state.restoring': 'Restoring',
     }
 
     /** Panel styles, rendered as an element so unmounting removes them. */
@@ -390,10 +388,6 @@ window.__ModuleLoader__.load({
       if (row.phase === 'loading') return { text: t('state.loading'), busy: true }
       if (row.phase === 'pending') return { text: t('state.pending'), busy: true }
       if (row.phase === 'unloading') return { text: t('state.unloading'), busy: true }
-      // Recorded as on but nothing is mounted yet: the startup restore is
-      // still running, or its attempt failed and the next start will retry.
-      // Reporting "disconnected" here would contradict the switch.
-      if (row.enabled === true) return { text: t('state.restoring'), busy: true }
       return { text: t('state.off') }
     }
 

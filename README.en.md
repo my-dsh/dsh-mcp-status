@@ -4,13 +4,13 @@ English | [中文](README.md)
 
 An MCP connection panel for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-It adds a button to the toolbar below the message composer that lists every MCP server configured on this machine and switches each connection on or off. **Each switch is stored in local SQLite and applies machine-wide**, so a server opened in one window is there for every other window and workspace too, a restart restores what you left on, and a fresh install connects to none.
+It adds a button to the toolbar below the message composer that lists every MCP server configured on this machine and switches each connection on or off. **Nothing is stored: every start begins with everything disconnected**, and you open the few servers this run needs. Quit DSH and they all close; the next start begins from zero again.
 
 ## Why this plugin
 
 In DSH each MCP server is one `@deepseek-ai/dsh-mcp-client` row. While such a row is enabled, the Loader opens its connection at startup; a server that fails to connect sends the supervisor into reconnect backoff (500ms → 30s, up to 10 attempts), so the background keeps retrying every few dozen seconds. For servers you rarely use that both slows startup and keeps burning child processes and connection attempts.
 
-This plugin moves the "should this be connected?" decision from startup to the user: rows stay as pure configuration, connections are opened on demand by the panel, and your choice is recorded in SQLite so it survives a restart.
+This plugin moves the "should this be connected?" decision from startup to the user: rows stay as pure configuration, connections are opened on demand by the panel, and **they last only for this run** — nothing you opened last time comes back on its own.
 
 ## Install
 
@@ -61,26 +61,24 @@ by name.
 
 **Rows are pure configuration.** Each `@deepseek-ai/dsh-mcp-client` row remains the single source of truth for a server's settings (transport / command / args / env / url), but it is set to `disabled: true` so the Loader mounts none of them. Startup therefore opens zero connections and runs zero reconnect timers.
 
-**The switch lives in SQLite, machine-wide.** One `node:sqlite` database (default `$DSH_HOME/mcp-status/mcp-status.db`) holds an `mcp_state(server, enabled)` table keyed by `serverName`. **A server with no row is off**, so a fresh install starts connected to nothing.
+**Nothing is stored.** The set of open connections lives in this plugin instance's memory only. A restart, a plugin reload or a profile edit empties it — **every start is zero connections**, and you open whichever server this run needs.
 
-MCP connections are machine-wide by construction: every `mcp-client` instance registers its tools into one global registry, and a `serverName` can be held by only one live instance at a time. One shared set of switches is therefore the only set that can be true — **a server you open in any window is available to every Session**.
+That is deliberate. A connected MCP server is a long-lived child process plus a live connection, and it holds a `serverName` (only one live instance per name). Persisting the set would put the startup connection cost right back where it came from, just with a different decider. So this panel keeps no record: **only what you opened in this run is connected.**
 
-**The panel owns connections.** Switching a server on writes the row first, then mounts the shipped `dsh-mcp-client` plugin in this plugin's own context with that row's config, so its tools and resources register into `ctx.tools` exactly as before; switching it off deletes that row and disposes the mount, closing the transport and unregistering the tools.
+**The panel owns connections.** Switching a server on mounts the shipped `dsh-mcp-client` plugin in this plugin's own context with that row's config, so its tools and resources register into `ctx.tools` exactly as before; switching it off disposes the mount, closing the transport and unregistering the tools. **The panel does not write the profile**: a switch is a runtime action, not a configuration edit, so it never rewrites `cordis.patch.yml` or recomposes the tree.
 
-**Reading never reconnects.** The `list` route is a pure projection: it reports each row's current phase, tool count and recorded switch, and performs no connection work. **Only a switch operation and the startup restore** mount or unmount anything. That matters: an earlier build reconciled per workspace on every read, so a second window or Session polling the list tore down a connection another one was using — visible as tools being added to and removed from a running Session, and as `unknown tool` failures mid-conversation.
+**Reading never reconnects.** The `list` route is a pure projection: it reports each row's current phase, tool count and switch, and performs no connection work. **Only a switch operation** mounts or unmounts anything. That matters: an earlier build reconciled per workspace on every read, so a second window or Session polling the list tore down a connection another one was using — visible as tools being added to and removed from a running Session, and as `unknown tool` failures mid-conversation.
 
-**A restart restores the set.** After activation (once the Loader has built the row tree) the plugin restores from the database once, independent of any Session or directory. A failed connection never leaves the record stuck on: the failure deletes the row immediately, the panel shows why, and the next start does not retry it pointlessly.
-
-**One compatibility path.** If a row is still enabled in the profile, the panel reports it honestly as "connected (maintained by that row)". Switching it off then persists `disabled: true` through the Plugin Manager, so the switch always means the same thing: off stays off across restarts.
+**One compatibility path.** If a row is still enabled in the profile, the panel reports it honestly as "connected (maintained by that row)". Switching it off persists `disabled: true` through the Plugin Manager, which is the only place the panel ever writes configuration — and only when you explicitly turn such a row off.
 
 ## Host routes
 
 Both live on the authenticated `/api` channel; the client calls them with a same-origin `fetch('api/...')`.
 
-- `GET api/mcp-status.list` → `{ servers: [{ entryId, serverName, transport, target, enabled, connected, phase, tools, editable }] }`
+- `GET api/mcp-status.list` → `{ servers: [{ entryId, serverName, transport, target, enabled, connected, phase, tools, managedBy, editable }] }`
 - `POST api/mcp-status.set` `{ entryId, enabled }` → `{ ok, application, status }`; on a failed connection `{ ok: false, reason: 'connect-failed', diagnostic }`
 
-Neither takes a `sessionId`: the switches are machine-wide and a read is just a projection.
+Neither takes a `sessionId`: the panel has no per-Session semantics, and a read is just a projection.
 
 ## Configuration
 
@@ -90,34 +88,23 @@ The row in `cordis.patch.yml` accepts an optional config, overridable through th
 - id: mcp-status
   name: '@my-dsh/dsh-mcp-status'
   config:
-    # Switch database path (default $DSH_HOME/mcp-status/mcp-status.db).
-    # The directory is created 0700 and the file written 0600.
-    databasePath: /home/me/.dsh/mcp-status/mcp-status.db
     # Milliseconds to wait for one connection (default 8000). After the bound
     # the panel shows "connecting" and keeps waiting instead of calling a slow
     # server failed.
     connectTimeoutMs: 8000
-    # Milliseconds after activation before restoring the servers recorded as on
-    # (default 1200). Gives the Loader time to finish building the row tree.
-    restoreDelayMs: 1200
 ```
 
-To clear the recorded switches, delete the database file (the next
-start rebuilds an empty table):
+There is no database and no state to clean up. Upgrading from a build that had
+one, the old `$DSH_HOME/mcp-status/mcp-status.db` is simply no longer read and
+can be deleted:
 
 ```sh
-rm ~/.dsh/mcp-status/mcp-status.db*
+rm -rf ~/.dsh/mcp-status
 ```
-
-Upgrading from the per-workspace build collapses the old table (keyed by
-`workspace, server`) into the machine-wide one: **every server recorded as on in
-any workspace stays on**, the rest are dropped. Those per-workspace opinions are
-exactly what let two Sessions disconnect each other, so folding them is part of
-the upgrade and needs no manual step.
 
 ## Dependencies
 
-Nothing third-party is imported at runtime: the MCP plugin is fetched through `ctx.loader.import('@deepseek-ai/dsh-mcp-client')`, so this bundle declares no `dependencies`. The Host half uses only Node builtins.
+Nothing third-party is imported at runtime: the MCP plugin is fetched through `ctx.loader.import('@deepseek-ai/dsh-mcp-client')`, so this bundle declares no `dependencies`. The Host half imports nothing at all — no filesystem, no SQLite.
 
 The client half is plain JavaScript (`React.createElement`, no build step) and requires only `react` and `react-dom` from the platform module table.
 
@@ -125,7 +112,7 @@ The client half is plain JavaScript (`React.createElement`, no build step) and r
 
 ```
 dsh-mcp-status/
-├── index.js            # Host half: machine-wide SQLite switch store, MCP rows, mount/unmount, two /api routes
+├── index.js            # Host half: MCP rows, mount/unmount, two /api routes (no persistence)
 ├── client.js           # Client half: the toolbar button and its panel
 ├── cordis.patch.yml    # Bundle patch: inserts the mcp-status row
 ├── locale/
